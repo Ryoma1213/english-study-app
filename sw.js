@@ -1,4 +1,4 @@
-const CACHE = "study-shell-8285f7e0942a209c";
+const CACHE = "study-shell-8c7f2646e1539d8b";
 const FILES = [
   "./",
   "./index.html",

@@ -1,3 +1,17 @@
+function icon(name) {
+  const paths = {
+    home: "M3 10 12 3l9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z",
+    history: "M5 5h14v16H5ZM8 2v6m8-6v6M5 10h14M8 13h2m4 0h2m-8 4h2",
+    analytics: "M4 20V10m8 10V4m8 16v-7M2 22h20",
+    settings:
+      "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0-5v2m0 14v2M3 12h2m14 0h2M5.5 5.5 7 7m10 10 1.5 1.5M5.5 18.5 7 17m10-10 1.5-1.5",
+    clock: "M12 8v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0",
+  };
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name] ?? paths.home}"/></svg>`;
+}
+for (const b of document.querySelectorAll("[data-nav]"))
+  b.innerHTML = icon(b.dataset.nav) + "<span>" + b.textContent + "</span>";
+
 import * as D from "./domain.js";
 import * as DB from "./db.js";
 import {
@@ -43,7 +57,13 @@ const tell = (t) => {
   }, 6000);
 };
 const err = (e) => {
-  const target = $(".form-error") ?? $("#notice");
+  let target = $(".form-error") ?? $(".operation-error");
+  if (!target) {
+    target = document.createElement("p");
+    target.className = "operation-error error";
+    target.setAttribute("role", "alert");
+    root.append(target);
+  }
   target.textContent = e.message ?? String(e);
 };
 async function refresh() {
@@ -91,6 +111,8 @@ async function run(
         "beforeend",
         button("失敗した操作を再試行", "retry"),
       );
+    const retryButton = root.querySelector("[data-action=retry]");
+    retryButton?.scrollIntoView({ block: "center" });
     return false;
   } finally {
     busy = false;
@@ -133,23 +155,27 @@ function render() {
       b.setAttribute("aria-current", b.dataset.nav === view ? "page" : "false"),
     );
   ({ home, history, analytics, settings })[view]();
+  syncSelectPreviews();
 }
 function home() {
   const now = D.minute(),
     today = D.day(now),
     ss = D.saved(data).filter((s) => D.day(s.start) === today),
     s = D.active(data);
-  root.innerHTML = `<p class="muted">${esc(new Date().toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "long", day: "numeric", weekday: "short" }))}</p><h1>今日の学習</h1><div class="big" id="today-time">${D.sum(ss) + (s && D.day(s.start) === today ? Math.max(0, D.duration(s, now)) : 0)}<small> 分</small></div><p class="muted">全Phaseの今日開始分${s && D.day(s.start) === today ? `・${s.state === "ending" ? "未保存を含む" : "学習中を含む"}` : ""}</p>${s ? `<section class="card current"><span class="tag">${{ running: "学習中", paused: "一時停止中", ending: "終了・入力待ち" }[s.state]}</span><h2>${esc(mat(s.material).name)}</h2><p>開始 ${D.clock(s.start)}${D.day(s.start) !== today ? `（${D.day(s.start)}）` : ""}</p><p class="big" id="elapsed">${Math.max(0, D.duration(s))}<small> 分</small></p><div class="row">${s.state === "ending" ? button("記録を仕上げる", "finish", s.id, "primary") : s.state === "paused" ? button("再開", "resume", s.id, "primary") + button("終了", "end", s.id) : button("終了", "end", s.id, "primary")}${button("…", "sessionMenu", s.id, "menu")}</div></section>` : ""}<h2>${data.current ? esc(phase(data.current).name) : "学習の準備"}</h2><p class="muted">教材の今日時間は現在Phase分です。</p>${
+  const total =
+    D.sum(ss) +
+    (s && D.day(s.start) === today ? Math.max(0, D.duration(s, now)) : 0);
+  root.innerHTML = `<p class="eyebrow">${esc(new Date().toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "long", day: "numeric", weekday: "short" }))}</p><section class="today-summary"><span class="summary-mark" aria-hidden="true">${icon("clock")}</span><h1>今日の学習</h1><div class="big" id="today-time">${total}<small> 分</small></div><p class="muted">今日開始したすべてのPhaseの記録${s && D.day(s.start) === today ? `・${s.state === "ending" ? "未保存を含む" : "学習中を含む"}` : ""}</p></section>${s ? `<section class="card current"><span class="tag"><span class="status-dot" aria-hidden="true"></span>${{ running: "学習中", paused: "一時停止中", ending: "終了・入力待ち" }[s.state]}</span><h2>${esc(mat(s.material).name)}</h2><p class="muted">開始 ${D.clock(s.start)}${D.day(s.start) !== today ? `（${D.day(s.start)}）` : ""}</p><p class="big" id="elapsed">${Math.max(0, D.duration(s))}<small> 分</small></p><div class="row">${s.state === "ending" ? button("記録を仕上げる", "finish", s.id, "primary") : s.state === "paused" ? button("再開", "resume", s.id, "primary") + button("終了", "end", s.id) : button("終了", "end", s.id, "primary")}${button("…", "sessionMenu", s.id, "menu")}</div></section>` : ""}<div class="section-title"><div><p class="eyebrow">現在のPhase</p><h2>${data.current ? esc(phase(data.current).name) : "学習の準備"}</h2></div></div>${
     !data.current
-      ? `<section class="card"><p>設定でPhaseを作成し、開始してください。</p>${button("設定へ", "settings")}</section>`
+      ? `<section class="card empty-state"><p>Phaseと教材を登録して、学習を始めましょう。</p>${button("設定へ", "settings", "", "primary")}</section>`
       : data.materials
           .filter((m) => m.phases.includes(data.current))
           .map(
             (m) =>
-              `<section class="card"><h2>${esc(m.name)}</h2>${progress(m)}<p>今日 ${D.sum(ss.filter((s) => s.material === m.id && s.phase === data.current))}分</p><div class="row">${s?.material === m.id ? "" : button("開始", "start", m.id, "primary")}${button("…", "materialMenu", m.id, "menu")}</div></section>`,
+              `<section class="card material-card"><h2>${esc(m.name)}</h2>${progress(m)}<div class="material-footer"><p class="muted">今日 <strong>${D.sum(ss.filter((s) => s.material === m.id && s.phase === data.current))}</strong>分<span class="scope-label">このPhaseの記録</span></p><div class="row">${s?.material === m.id ? "" : button("開始", "start", m.id, "primary")}${button("…", "materialMenu", m.id, "menu")}</div></div></section>`,
           )
           .join("") ||
-        `<section class="card"><p>教材を登録すると、ここからすぐに開始できます。</p>${button("教材を追加", "material")}</section>`
+        `<section class="card empty-state"><p>教材を登録すると、ここからすぐに開始できます。</p>${button("教材を追加", "material", "", "primary")}</section>`
   }${retry ? button("失敗した操作を再試行", "retry") : ""}`;
 }
 async function start(id) {
@@ -233,33 +259,31 @@ function finish(id) {
 }
 function history() {
   const ss = D.saved(data),
-    monthSessions = ss.filter((s) => D.day(s.start).startsWith(month)),
-    days = new Date(Date.parse(month + "-01") + 32 * 86400000);
-  const last = new Date(
-    Date.UTC(days.getUTCFullYear(), days.getUTCMonth(), 0),
-  ).getUTCDate();
-  const first = new Date(month + "-01").getUTCDay(),
-    ds = ss.filter((s) => D.day(s.start) === selected),
+    monthSessions = ss.filter((s) => D.day(s.start).startsWith(month));
+  const [year, mon] = month.split("-").map(Number),
+    last = new Date(Date.UTC(year, mon, 0)).getUTCDate(),
+    first = new Date(month + "-01").getUTCDay();
+  const ds = ss.filter((s) => D.day(s.start) === selected),
     st = D.streak(data);
-  root.innerHTML = `<div class="row"><h1>記録</h1>${button("…", "historyMenu", "", "menu")}</div><p>今月の学習日数 ${new Set(monthSessions.map((s) => D.day(s.start))).size}日</p><p>${st.yesterday ? "昨日まで " : ""}連続 ${st.count}日</p><div class="row">${button("前月", "prevMonth")}<strong>${month}</strong>${button("翌月", "nextMonth")}${button("今日", "today")}</div><div class="calendar">${["日", "月", "火", "水", "木", "金", "土"].map((d) => `<span class="weekday">${d}</span>`).join("")}${"<span></span>".repeat(first)}${Array.from(
+  root.innerHTML = `<div class="page-title"><div><p class="eyebrow">学習の履歴</p><h1>記録</h1></div>${button("… 記録を追加", "historyMenu", "", "quiet")}</div><p class="muted help-text">記録し忘れた学習はここから追加できます。保存した記録は、日付を選んで「編集・削除」から変更できます。</p><div class="stats-grid"><div class="stat-tile"><span>表示月の学習日数</span><strong>${new Set(monthSessions.map((s) => D.day(s.start))).size}<small> 日</small></strong></div><div class="stat-tile"><span>${st.yesterday ? "昨日までの連続学習" : "連続学習"}</span><strong>${st.count}<small> 日</small></strong></div></div><section class="calendar-panel"><div class="month-toolbar">${button("前月", "prevMonth", "", "quiet")}<h2>${year}年${mon}月</h2>${button("翌月", "nextMonth", "", "quiet")}</div><div class="calendar">${["日", "月", "火", "水", "木", "金", "土"].map((d) => `<span class="weekday">${d}</span>`).join("")}${"<span></span>".repeat(first)}${Array.from(
     { length: last },
     (_, i) => {
       const date = `${month}-${String(i + 1).padStart(2, "0")}`,
-        ds = ss.filter((s) => D.day(s.start) === date);
-      return `<button data-action="date" data-id="${date}" class="${date === selected ? "selected" : ""} ${ds.length ? "has" : ""}" aria-label="${date} ${D.sum(ds)}分${ds.length ? " 学習記録あり" : ""}" aria-pressed="${date === selected}">${i + 1}<small>${ds.length ? `${D.sum(ds)}分` : "—"}</small></button>`;
+        sessions = ss.filter((s) => D.day(s.start) === date);
+      return `<button data-action="date" data-id="${date}" class="${date === selected ? "selected" : ""} ${sessions.length ? "has" : ""} ${date === D.today() ? "is-today" : ""}" aria-label="${date} ${D.sum(sessions)}分${sessions.length ? " 学習記録あり" : ""}" aria-pressed="${date === selected}"><span>${i + 1}</span><small>${sessions.length ? `${D.sum(sessions)}分` : "—"}</small></button>`;
     },
   ).join(
     "",
-  )}</div><h2>${selected}</h2><p>実学習時間 ${timeText(D.sum(ds))}</p>${ds.length ? `<p class="muted">学習時間帯 ${span({ start: Math.min(...ds.map((s) => s.start)), end: Math.max(...ds.map((s) => s.end)) })}</p>` : "<p>この日の記録はありません</p>"}${data.materials
+  )}</div><div class="calendar-bottom">${button("今日に戻る", "today", "", "quiet")}</div></section><div class="section-title"><h2>${selected}</h2><span class="tag">${timeText(D.sum(ds))}</span></div>${ds.length ? `<p class="muted">学習時間帯 ${span({ start: Math.min(...ds.map((s) => s.start)), end: Math.max(...ds.map((s) => s.end)) })}</p>` : '<section class="card empty-state"><p>この日の記録はありません</p><p class="muted">記録し忘れた場合は、上の「記録を追加」から登録できます。</p></section>'}${data.materials
     .map((m) => {
       const ms = ds.filter((s) => s.material === m.id);
       return !ms.length
         ? ""
-        : `<section class="card"><h3>${esc(m.name)}・合計 ${D.sum(ms)}分</h3>${ms
+        : `<section class="card history-card"><div class="record-material-heading"><h3>${esc(m.name)}</h3><span class="tag">合計 ${D.sum(ms)}分</span></div>${ms
             .sort((a, b) => a.start - b.start)
             .map(
               (s) =>
-                `<div><p>${span(s)} / ${D.duration(s)}分</p><p class="muted">${esc(phase(s.phase).name)}${att(s.attempt).total === null ? "" : `・${att(s.attempt).number}回目`}</p><p>${s.progress === "recorded" ? `P.${s.before} → P.${s.page}` : progressText(data, s)}</p>${button("… 記録の操作", "sessionMenu", s.id)}</div>`,
+                `<article class="session-item"><div class="session-heading"><p class="session-time">${span(s)}</p><strong>${D.duration(s)}<small> 分</small></strong></div><p class="muted">${esc(phase(s.phase).name)}${att(s.attempt).total === null ? "" : `・${att(s.attempt).number}回目`}</p><p class="session-progress">${s.progress === "recorded" ? `P.${s.before} → P.${s.page}` : progressText(data, s)}</p>${button("… 編集・削除", "sessionMenu", s.id, "quiet")}</article>`,
             )
             .join("")}</section>`;
     })
@@ -280,49 +304,42 @@ function analytics() {
   const ss = D.saved(data).filter(
       (s) => D.day(s.start) >= analyticsFrom && D.day(s.start) <= analyticsTo,
     ),
-    avg = D.average(data, analyticsFrom, analyticsTo);
-  const bars = new Map();
+    avg = D.average(data, analyticsFrom, analyticsTo),
+    bars = new Map();
   for (
     let t = Date.parse(analyticsFrom);
     t <= Math.min(Date.parse(analyticsTo), Date.parse(D.today()));
     t += 86400000
   ) {
     const date = new Date(t).toISOString().slice(0, 10),
-      k = group === "week" ? weekStart(date) : date;
-    bars.set(k, 0);
+      key = group === "week" ? weekStart(date) : date;
+    bars.set(key, 0);
   }
   for (const s of ss) {
-    const date = D.day(s.start),
-      key = group === "week" ? weekStart(date) : date;
+    const key = group === "week" ? weekStart(D.day(s.start)) : D.day(s.start);
     if (bars.has(key)) bars.set(key, bars.get(key) + D.duration(s));
   }
-  const max = Math.max(1, ...bars.values());
-  root.innerHTML = `<h1>分析</h1><p class="muted">保存済みの記録から振り返ります。</p><div class="row">${button("今週", "thisWeek")}${button("今月", "thisMonth")}</div><form id="range-form">${field("開始日", "from", analyticsFrom, "date")}${field("終了日", "to", analyticsTo, "date")}<label>表示<select name="group"><option value="day" ${group === "day" ? "selected" : ""}>日別</option><option value="week" ${group === "week" ? "selected" : ""}>週別（合計）</option></select></label><button>期間を表示</button><p class="form-error error" role="alert"></p></form><section class="card"><p>合計 <strong>${timeText(D.sum(ss))}</strong>・学習 ${new Set(ss.map((s) => D.day(s.start))).size}日</p><p>${avg.days}日間・1日平均 ${avg.value === null ? "—" : Math.round(avg.value * 10) / 10 + "分"}</p><small>平均対象 ${avg.from} ～ ${avg.to}（未学習日を含む）</small></section>${ss.length ? "" : "<p>まだ記録がありません</p>"}<p>時間の推移（分・0から表示）</p><div class="bars" aria-label="学習時間の棒グラフ">${[
-    ...bars,
-  ]
-    .slice(-60)
-    .map(
-      ([date, n]) =>
-        `<button data-action="bar" data-id="${date}：${n}分" style="--height:${Math.max(2, (n / max) * 100)}%" aria-label="${date} ${n}分"></button>`,
-    )
-    .join(
-      "",
-    )}</div><p id="bar-detail" class="chart-label">棒をタップすると日付と時間を表示します。最大60区間を表示。</p><details><summary>グラフの表を表示</summary><table><thead><tr><th>期間</th><th>合計（分）</th></tr></thead><tbody>${[...bars].map(([d, n]) => `<tr><td>${d}${group === "week" ? ` ～ ${new Date(Date.parse(d) + 6 * 86400000).toISOString().slice(0, 10)}` : ""}</td><td>${n}</td></tr>`).join("")}</tbody></table></details><h2>Phase実績（全期間）</h2><label>閲覧するPhase<select id="analysis-phase">${data.phases.map((p) => `<option value="${p.id}" ${(analysisPhase ?? data.current) === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label><div id="phase-analysis"></div><h2>教材実績・取り組み比較（全期間）</h2>${data.materials
+  root.innerHTML = `<div class="page-title"><div><p class="eyebrow">学習を振り返る</p><h1>分析</h1></div></div><div class="period-controls">${button("今週", "thisWeek", "", "quiet")}${button("今月", "thisMonth", "", "quiet")}</div><details class="card period-editor"><summary>期間・表示方法を選ぶ<span class="scope-label">${analyticsFrom} ～ ${analyticsTo}・${group === "week" ? "週別" : "日別"}</span></summary><form id="range-form"><div class="form-grid">${field("開始日", "from", analyticsFrom, "date")}${field("終了日", "to", analyticsTo, "date")}</div><label for="chart-group">集計単位</label><select id="chart-group" name="group"><option value="day" ${group === "day" ? "selected" : ""}>日別</option><option value="week" ${group === "week" ? "selected" : ""}>週別（合計）</option></select><button class="primary">期間を表示</button><p class="form-error error" role="alert"></p></form></details><div class="stats-grid"><div class="stat-tile"><span>学習時間の合計</span><strong>${D.sum(ss)}<small> 分</small></strong><span>${new Set(ss.map((s) => D.day(s.start))).size}日学習</span></div><div class="stat-tile"><span>1日平均</span><strong>${avg.value === null ? "—" : Math.round(avg.value * 10) / 10}<small>${avg.value === null ? "" : " 分"}</small></strong><span>${avg.days}日間・未学習日を含む</span></div></div><p class="muted average-range">平均の対象：${avg.days ? `${avg.from} ～ ${avg.to}` : "まだ記録がありません"}</p>${ss.length ? "" : '<p class="muted">まだ記録がありません</p>'}<section class="card chart-card"><div class="section-title"><h2>学習時間の推移</h2><span class="muted">${group === "week" ? "週別合計" : "日別"}・分</span></div><div id="time-chart"></div><details class="chart-table"><summary>すべての数値を表で見る</summary><table><thead><tr><th>期間</th><th>合計（分）</th></tr></thead><tbody>${[...bars].map(([d, n]) => `<tr><td>${chartRange(d)}</td><td>${n}</td></tr>`).join("")}</tbody></table></details></section><div class="section-title"><h2>Phase実績（全期間）</h2></div><label>閲覧するPhase<select id="analysis-phase">${data.phases.map((p) => `<option value="${p.id}" ${(analysisPhase ?? data.current) === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label><p class="selection-preview" id="analysis-phase-name"></p><div id="phase-analysis"></div><div class="section-title"><h2>教材実績・取り組み比較（全期間）</h2></div>${data.materials
     .map(
       (m) =>
-        `<details class="card"><summary>${esc(m.name)}・${D.sum(D.saved(data).filter((s) => s.material === m.id))}分</summary>${data.attempts
-          .filter((a) => a.material === m.id)
-          .map((a) => {
-            const xs = D.saved(data)
-                .filter((s) => s.attempt === a.id)
-                .sort((x, y) => x.start - y.start),
-              pts = xs.filter((s) => s.progress === "recorded"),
-              complete = pts.find((s) => s.page === a.total);
-            return `<h3>${a.total === null ? "時間のみ" : `${a.number}回目 / 総${a.total}ページ`}</h3><p>累計 ${D.sum(xs)}分${a.total === null ? "" : `・最終記録 ${pts.length ? "P." + Math.max(...pts.map((s) => s.page)) : "—"}`}</p>${a.total === null ? "" : `<p class="muted">${complete ? "100%到達" : "到達未確認"}・到達まで ${complete ? Math.round((Date.parse(D.day(complete.start)) - Date.parse(D.day(xs[0].start))) / 86400000) + 1 + "日" : "—"} / ${complete ? D.sum(xs.filter((s) => s.start <= complete.start)) + "分" : "—"}</p>${progressChart(pts, a)}<table><tr><th>日付・Phase</th><th>到達ページ</th></tr>${pts.map((s) => `<tr><td>${D.day(s.start)}<br>${esc(phase(s.phase).name)}</td><td>${s.page}</td></tr>`).join("")}</table>`}`;
-          })
-          .join("")}</details>`,
+        `<details class="card attempt-card"><summary><span>${esc(m.name)}</span><span class="scope-label">累計 ${D.sum(D.saved(data).filter((s) => s.material === m.id))}分</span></summary>${
+          data.attempts
+            .filter((a) => a.material === m.id)
+            .map((a) => {
+              const xs = D.saved(data)
+                  .filter((s) => s.attempt === a.id)
+                  .sort((x, y) => x.start - y.start),
+                pts = xs.filter((s) => s.progress === "recorded"),
+                complete = pts.find((s) => s.page === a.total);
+              return `<section class="attempt-detail"><h3>${a.total === null ? "時間のみ" : `${a.number}回目・総${a.total}ページ`}</h3><p>累計 <strong>${D.sum(xs)}分</strong>${a.total === null ? "" : `・最終記録 ${pts.length ? "P." + Math.max(...pts.map((s) => s.page)) : "—"}`}</p>${a.total === null ? "" : `${progressChart(pts, a)}<details><summary>進捗の記録と到達までの実績</summary><p class="muted">${complete ? "100%到達" : "到達未確認"}・到達までの日数：${complete ? Math.round((Date.parse(D.day(complete.start)) - Date.parse(D.day(xs[0].start))) / 86400000) + 1 + "日" : "—"}</p><p class="muted">到達までの時間：${complete ? D.sum(xs.filter((s) => s.start <= complete.start)) + "分" : "—"}</p><table><thead><tr><th>日付・Phase</th><th>到達ページ</th></tr></thead><tbody>${pts.map((s) => `<tr><td>${D.day(s.start)}<br>${esc(phase(s.phase).name)}</td><td>${s.page}</td></tr>`).join("")}</tbody></table></details>`}</section>`;
+            })
+            .join("") || '<p class="muted">まだ記録がありません</p>'
+        }</details>`,
     )
     .join("")}`;
+  timeChartEntries = [...bars];
+  timeChartOffset = null;
+  renderTimeChart();
   $("#range-form").onsubmit = (e) => {
     e.preventDefault();
     const f = e.target;
@@ -344,15 +361,49 @@ function analytics() {
   };
   phaseAnalysis();
 }
+let timeChartEntries = [],
+  timeChartOffset = null;
+const chartRange = (date) =>
+  group === "week"
+    ? `${date} ～ ${new Date(Date.parse(date) + 6 * 86400000).toISOString().slice(0, 10)}`
+    : date;
+function renderTimeChart() {
+  const target = $("#time-chart");
+  if (!target) return;
+  if (!timeChartEntries.length) {
+    target.innerHTML = '<p class="muted">この期間の記録はありません</p>';
+    return;
+  }
+  const count = Math.max(
+    1,
+    Math.min(7, Math.floor((target.clientWidth || 240) / 48)),
+  );
+  const total = timeChartEntries.length;
+  timeChartOffset ??= Math.max(0, total - count);
+  timeChartOffset = Math.min(timeChartOffset, Math.max(0, total - 1));
+  const entries = timeChartEntries.slice(
+      timeChartOffset,
+      timeChartOffset + count,
+    ),
+    maximum = Math.max(1, ...timeChartEntries.map(([, n]) => n)),
+    axisMax = Math.max(10, Math.ceil(maximum / 10) * 10);
+  target.innerHTML = `<p class="chart-period">${entries[0][0]} ～ ${group === "week" ? chartRange(entries.at(-1)[0]).split(" ～ ")[1] : entries.at(-1)[0]}</p><div class="chart-scale"><span>縦軸：0～${axisMax}分</span><span>合計時間</span></div><div class="chart-plot" aria-label="学習時間の棒グラフ（0分から表示）">${entries.map(([date, n]) => `<button class="chart-column" data-action="bar" data-id="${chartRange(date)}：${n}分" aria-label="${chartRange(date)} ${n}分" aria-pressed="false"><span class="chart-value">${n}</span><span class="chart-track"><span class="chart-bar ${n === 0 ? "zero" : ""}" style="height:${n === 0 ? "2px" : (n / axisMax) * 100 + "%"}"></span></span><span class="chart-date">${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}</span></button>`).join("")}</div><div class="chart-pagination">${timeChartOffset > 0 ? button("前の期間", "chartPrev", "", "quiet") : ""}<span class="muted">${timeChartOffset + 1}–${timeChartOffset + entries.length} / ${total}${group === "week" ? "週" : "日"}</span>${timeChartOffset + entries.length < total ? button("次の期間", "chartNext", "", "quiet") : ""}</div><p id="bar-detail" class="chart-detail">棒をタップすると、日付と学習時間を確認できます。</p>`;
+  target.dataset.pageSize = String(count);
+}
 function progressChart(ss, a) {
-  if (!ss.length) return "";
+  if (!ss.length) return '<p class="muted">ページの記録はまだありません。</p>';
   const first = ss[0].start,
     last = ss.at(-1).start;
-  return `<svg class="chart" viewBox="0 0 300 160" role="img" aria-label="${a.number}回目の進捗推移。詳細は下の表"><path d="M20 5V140H295" fill="none" stroke="currentColor"/><polyline fill="none" stroke="var(--accent)" stroke-width="3" points="${ss.map((s) => `${20 + ((s.start - first) / Math.max(1, last - first)) * 270},${140 - (s.page / a.total) * 130}`).join(" ")}"/></svg>`;
+  const x = (s) => 44 + ((s.start - first) / Math.max(1, last - first)) * 266,
+    y = (s) => 160 - (s.page / a.total) * 136;
+  const points = ss.map((s) => `${x(s)},${y(s)}`).join(" "),
+    max = a.total;
+  return `<div class="progress-chart"><p class="chart-scale"><span>到達ページ</span><span>総${max}ページ</span></p><svg class="chart" viewBox="0 0 330 195" role="img" aria-label="${a.number}回目の進捗推移。日付とPhaseの詳細は下の表で確認できます。"><g class="chart-grid"><path d="M44 24H310M44 92H310M44 160H310"/></g><g class="chart-axis-text"><text x="36" y="28" text-anchor="end">${max}</text><text x="36" y="96" text-anchor="end">${Math.floor(max / 2)}</text><text x="36" y="164" text-anchor="end">0</text><text x="44" y="184">${D.day(first).slice(5).replace("-", "/")}</text><text x="310" y="184" text-anchor="end">${D.day(last).slice(5).replace("-", "/")}</text></g><path d="M44 160H310" class="chart-baseline"/><polyline fill="none" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round" points="${points}"/>${ss.map((s) => `<circle cx="${x(s)}" cy="${y(s)}" r="3.5" fill="var(--card)" stroke="var(--accent)" stroke-width="2"><title>${D.day(s.start)}・${esc(phase(s.phase).name)}・P.${s.page}</title></circle>`).join("")}</svg><p class="muted chart-caption">${D.day(first)} ～ ${D.day(last)}・日付ごとの記録値</p></div>`;
 }
 function phaseAnalysis() {
   const p = phase($("#analysis-phase")?.value);
   if (!p) return;
+  if ($("#analysis-phase-name")) $("#analysis-phase-name").textContent = p.name;
   const ss = D.saved(data).filter((s) => s.phase === p.id);
   $("#phase-analysis").innerHTML =
     `<p>${D.sum(ss)}分・${new Set(ss.map((s) => D.day(s.start))).size}日</p>${data.boundaries
@@ -406,14 +457,24 @@ function formPage(title, html, onSubmit) {
   editing = true;
   root.className = "editing";
   root.innerHTML = `${button("戻る", "back")}<h1>${esc(title)}</h1><form id="editor">${html}<p class="form-error error" role="alert"></p><div class="savebar"><button class="primary" type="submit">保存</button></div></form>`;
-  $("#editor").onsubmit = async (e) => {
+  const form = $("#editor");
+  form.onsubmit = async (e) => {
     e.preventDefault();
+    if (form.dataset.submitting || busy) return;
+    form.dataset.submitting = "true";
+    const submit = form.querySelector("[type=submit]");
+    submit.disabled = true;
     try {
-      await onSubmit(e.target);
+      await onSubmit(form);
     } catch (e) {
       err(e);
+    } finally {
+      delete form.dataset.submitting;
+      if (submit.isConnected) submit.disabled = false;
     }
   };
+  syncSelectPreviews();
+  root.focus({ preventScroll: true });
 }
 function phaseForm(id) {
   const p = phase(id);
@@ -514,10 +575,15 @@ function editSession(id) {
     tell("先に教材を登録してください");
     return;
   }
+  if (!data.phases.length) {
+    tell("先にPhaseを登録してください");
+    return;
+  }
+  const defaultTime = D.parseTime(selected + "T" + D.clock(D.minute()));
   let material = s?.material ?? fallback.id;
   formPage(
-    s ? "記録を修正" : "過去の学習記録追加",
-    `<label>教材<select name="material">${data.materials.map((m) => `<option value="${m.id}" ${m.id === material ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select></label><label>学習時のPhase<select name="phase">${data.phases.map((p) => `<option value="${p.id}" ${p.id === (s?.phase ?? data.current) ? "selected" : ""}>${esc(p.name)}（${status(p)}）</option>`).join("")}</select></label><div id="attempt-field"></div>${field("開始（日本時間）", "start", D.dateTime(s?.start ?? D.minute()), "datetime-local")}${s && ["running", "paused"].includes(s.state) ? "" : field("終了（日本時間）", "end", D.dateTime(s?.end ?? D.minute()), "datetime-local")}<div id="edit-page">${field("到達ページ（任意）", "page", s?.page ?? "", "text", 'inputmode="numeric"')}<label class="check"><input type="checkbox" name="noChange" ${s?.progress === "no_change" ? "checked" : ""}>ページ進捗なし</label></div><details><summary>一時停止区間を訂正</summary><div id="pauses">${(s?.pauses ?? []).map((p, i) => pauseFields(p, i)).join("")}</div>${button("停止区間を追加", "addPause")}</details><p class="muted">後Phaseの引継値や当時の学習前ページは自動変更しません。</p>`,
+    s ? "記録を修正" : "過去の記録を追加",
+    `<label>教材<select name="material">${data.materials.map((m) => `<option value="${m.id}" ${m.id === material ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select></label><label>学習時のPhase<select name="phase">${data.phases.map((p) => `<option value="${p.id}" ${p.id === (s?.phase ?? data.current) ? "selected" : ""}>${esc(p.name)}（${status(p)}）</option>`).join("")}</select></label><div id="attempt-field"></div>${field("開始（日本時間）", "start", D.dateTime(s?.start ?? defaultTime), "datetime-local")}${s && ["running", "paused"].includes(s.state) ? "" : field("終了（日本時間）", "end", D.dateTime(s?.end ?? defaultTime), "datetime-local")}<div id="edit-page">${field("到達ページ（任意）", "page", s?.page ?? s?.draft?.page ?? "", "text", 'inputmode="numeric"')}<label class="check"><input type="checkbox" name="noChange" ${s?.progress === "no_change" || (s?.state === "ending" && s.draft.noChange) ? "checked" : ""}>ページ進捗なし</label></div><details><summary>一時停止区間を訂正</summary><div id="pauses">${(s?.pauses ?? []).map((p, i) => pauseFields(p, i)).join("")}</div>${button("停止区間を追加", "addPause")}</details><p class="muted">後Phaseの引継値や当時の学習前ページは自動変更しません。</p>`,
     async (f) => {
       const p = phase(f.phase.value),
         start = D.parseTime(f.start.value),
@@ -583,11 +649,19 @@ function editSession(id) {
       }
       await run(c, () => {
         if (s?.state === "ending") finish(id);
-        else render();
+        else {
+          selected = D.day(c.start);
+          month = selected.slice(0, 7);
+          render();
+          tell(s ? "記録を修正しました" : "過去の記録を追加しました");
+        }
       });
     },
   );
   const f = $("#editor");
+  for (const name of ["start", "end"]) {
+    if (f.elements[name]) f.elements[name].required = true;
+  }
   const update = () => {
     const aa = data.attempts.filter((a) => a.material === f.material.value);
     $("#attempt-field").innerHTML = `<label>取り組み<select name="attempt">${
@@ -601,6 +675,7 @@ function editSession(id) {
         : '<option value="">初回</option>'
     }</select></label>`;
     $("#edit-page").hidden = mat(f.material.value).mode === "time_only";
+    syncSelectPreviews();
   };
   f.material.onchange = update;
   f.noChange.onchange = () => {
@@ -725,8 +800,14 @@ async function handle(action, id, target) {
         ...(s.state === "running"
           ? [{ label: "一時停止", value: "pause" }]
           : []),
-        { label: "時刻・記録を修正", value: "edit" },
-        { label: "セッションを削除", value: "delete" },
+        {
+          label: s.state === "saved" ? "記録を修正" : "時刻・記録を修正",
+          value: "edit",
+        },
+        {
+          label: s.state === "saved" ? "記録を削除" : "セッションを削除",
+          value: "delete",
+        },
         { label: "閉じる", value: null },
       ];
       const a = await modal(mat(s.material).name, "", options);
@@ -743,7 +824,11 @@ async function handle(action, id, target) {
             { label: "キャンセル", value: false },
           ],
         );
-        if (yes) await run({ type: "delete", id });
+        if (yes)
+          await run({ type: "delete", id }, () => {
+            render();
+            tell("記録を削除しました");
+          });
       } else if (a) await handle(a, id);
       break;
     }
@@ -818,7 +903,7 @@ async function handle(action, id, target) {
     case "historyMenu":
       if (
         await modal("記録の操作", "", [
-          { label: "過去の学習記録追加", value: true },
+          { label: "過去の記録を追加", value: true },
           { label: "閉じる", value: false },
         ])
       )
@@ -853,6 +938,19 @@ async function handle(action, id, target) {
       break;
     case "bar":
       $("#bar-detail").textContent = id;
+      document
+        .querySelectorAll(".chart-column")
+        .forEach((b) => b.setAttribute("aria-pressed", String(b === target)));
+      break;
+    case "chartPrev":
+    case "chartNext":
+      timeChartOffset = Math.max(
+        0,
+        timeChartOffset +
+          (action === "chartPrev" ? -1 : 1) *
+            Number($("#time-chart").dataset.pageSize),
+      );
+      renderTimeChart();
       break;
     case "export":
       exportForm();
@@ -988,3 +1086,29 @@ new ResizeObserver(() => {
     document.querySelector("nav").getBoundingClientRect().height + "px",
   );
 }).observe(document.querySelector("nav"));
+
+function syncSelectPreviews() {
+  for (const select of root.querySelectorAll("select")) {
+    if (
+      select.id === "analysis-phase" ||
+      select.name === "group" ||
+      select.name === "mode"
+    )
+      continue;
+    let preview = select.parentElement.querySelector(".selection-preview");
+    if (!preview) {
+      preview = document.createElement("span");
+      preview.className = "selection-preview";
+      preview.setAttribute("aria-hidden", "true");
+      preview.setAttribute("aria-hidden", "true");
+      select.after(preview);
+    }
+    preview.textContent = select.selectedOptions[0]?.textContent ?? "";
+  }
+}
+document.addEventListener("change", (e) => {
+  if (e.target.matches("select")) syncSelectPreviews();
+});
+window.addEventListener("resize", () => {
+  if (view === "analytics" && !editing) renderTimeChart();
+});
