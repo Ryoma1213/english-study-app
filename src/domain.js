@@ -373,8 +373,9 @@ export function reduce(input, c, now = minute()) {
       break;
     }
     case "material": {
-      const mode = c.mode,
-        total = mode === "time_only" ? null : Number(c.total),
+      const mode = c.timeOnly ? (m?.mode ?? "time_only") : c.mode,
+        total =
+          mode === "time_only" ? null : c.timeOnly ? m.total : Number(c.total),
         name = clean(c.name);
       need(name, "教材名を入力してください");
       if (m) {
@@ -418,7 +419,7 @@ export function reduce(input, c, now = minute()) {
       let a = attempt(d, m);
       let b = ensureBoundary(d, d.current, a, t);
       const full = a.total !== null && reach(d, d.current, a.id) === a.total;
-      if (full) {
+      if (full && !c.timeOnly) {
         need(
           ["continue", "new"].includes(c.choice),
           "100%教材の学習方法を選んでください",
@@ -443,7 +444,8 @@ export function reduce(input, c, now = minute()) {
         end: null,
         state: "running",
         pauses: [],
-        before: a.total === null ? null : reach(d, d.current, a.id),
+        before:
+          a.total === null ? null : c.timeOnly ? 0 : reach(d, d.current, a.id),
         progress: a.total === null ? "not_applicable" : "unrecorded",
         page: null,
         draft: { page: "", noChange: false },
@@ -475,15 +477,17 @@ export function reduce(input, c, now = minute()) {
       break;
     case "save": {
       need(s?.state === "ending", "入力待ちの記録を確認してください");
-      progress(
-        s,
-        d.attempts.find((a) => a.id === s.attempt),
-        c.page,
-        c.noChange,
-        true,
-      );
+      if (!c.timeOnly)
+        progress(
+          s,
+          d.attempts.find((a) => a.id === s.attempt),
+          c.page,
+          c.noChange,
+          true,
+        );
       s.state = "saved";
-      s.draft = { page: String(c.page), noChange: !!c.noChange };
+      if (!c.timeOnly)
+        s.draft = { page: String(c.page), noChange: !!c.noChange };
       break;
     }
     case "edit":
@@ -506,8 +510,8 @@ export function reduce(input, c, now = minute()) {
       );
       if (!a) {
         const aa = d.attempts.filter((a) => a.material === mat.id);
-        need(aa.length <= 1, "取り組みを選んでください");
-        a = aa[0] ?? attempt(d, mat);
+        need(c.timeOnly || aa.length <= 1, "取り組みを選んでください");
+        a = (c.timeOnly ? aa.at(-1) : aa[0]) ?? attempt(d, mat);
       }
       ensureBoundary(d, c.phase, a, t);
       const moved =
@@ -537,8 +541,13 @@ export function reduce(input, c, now = minute()) {
       });
       if (mat.mode === "time_only") x.before = null;
       else if (x.before === null) x.before = 0;
-      progress(x, a, c.page, c.noChange);
-      x.draft = { page: String(c.page), noChange: !!c.noChange };
+      if (!c.timeOnly) {
+        progress(x, a, c.page, c.noChange);
+        x.draft = { page: String(c.page), noChange: !!c.noChange };
+      } else if (c.type === "add" || moved) {
+        progress(x, a, "", false);
+        x.draft = { page: "", noChange: false };
+      }
       break;
     }
     case "delete":
