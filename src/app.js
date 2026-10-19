@@ -254,7 +254,7 @@ let analyticsFrom,
   analysisMaterial = "",
   breakdown = "material",
   analysisOptionsOpen = false;
-const analysisLabels = { day: "日別", week: "週別", month: "月別" };
+const analysisLabels = { day: "日別", week: "週別" };
 function analytics() {
   if (!analyticsFrom)
     ({ from: analyticsFrom, to: analyticsTo } = D.analysisPeriod(group));
@@ -582,7 +582,7 @@ function exportForm() {
   const range = exportRange(data);
   formPage(
     "記録をテキストで出力",
-    `<p>閲覧用TXTです。全期間を初期選択しています。</p>${field("開始日", "from", range.from, "date")}${field("終了日", "to", range.to, "date")}<p id="export-count"></p>`,
+    `<p>開始日から終了日まで、両日を含む記録を出力します。1日だけの指定もできます。</p>${field("開始日", "from", range.from, "date")}${field("終了日", "to", range.to, "date")}<label class="check"><input type="checkbox" name="details">開始・終了時刻も含める</label><p id="export-count" class="muted"></p>`,
     async (f) => {
       const from = f.from.value,
         to = f.to.value;
@@ -602,7 +602,7 @@ function exportForm() {
       if (yes)
         try {
           await download(
-            exportText(snapshot, from, to),
+            exportText(snapshot, from, to, { details: f.details.checked }),
             `English_Study_Records_${from}_${to}.txt`,
             "text/plain;charset=utf-8",
           );
@@ -611,6 +611,32 @@ function exportForm() {
         }
     },
   );
+  const form = $("#editor");
+  form.from.required = true;
+  form.to.required = true;
+  form.from.step = "1";
+  form.to.step = "1";
+  const update = () => {
+    const from = form.from.value,
+      to = form.to.value;
+    const ss = D.saved(data).filter(
+      (s) => D.day(s.start) >= from && D.day(s.start) <= to,
+    );
+    $("#export-count").textContent =
+      !from || !to || from > to
+        ? "開始日と終了日を確認してください"
+        : from +
+          " ～ " +
+          to +
+          "・" +
+          ss.length +
+          "件・合計 " +
+          D.sum(ss) +
+          "分";
+  };
+  form.from.oninput = update;
+  form.to.oninput = update;
+  update();
   $("#editor button[type=submit]").textContent = "出力内容を確認";
 }
 async function handle(action, id, target) {
