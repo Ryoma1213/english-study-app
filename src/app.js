@@ -252,7 +252,8 @@ let analyticsFrom,
   group = "day",
   analysisPhase = "",
   analysisMaterial = "",
-  breakdown = "material";
+  breakdown = "material",
+  analysisOptionsOpen = false;
 const analysisLabels = { day: "日別", week: "週別", month: "月別" };
 function analytics() {
   if (!analyticsFrom)
@@ -287,16 +288,18 @@ function analytics() {
        `<button data-action="analysisGroup" data-id="${key}" aria-pressed="${group === key}">${label}</button>`,
    )
    .join("")}</div>
- <section class="card analysis-filters"><label for="analysis-phase">Phase</label><select id="analysis-phase">${options(data.phases, analysisPhase, "すべてのPhase")}</select>${analysisPhase ? `<p class="selection-preview" aria-hidden="true">${esc(phase(analysisPhase).name)}</p>` : ""}<label for="analysis-material">教材</label><select id="analysis-material">${options(data.materials, analysisMaterial, "すべての教材")}</select>${analysisMaterial ? `<p class="selection-preview" aria-hidden="true">${esc(mat(analysisMaterial).name)}</p>` : ""}</section>
+ <p class="analysis-scope muted">${esc(analysisMaterial ? mat(analysisMaterial).name : "すべての教材")}・${esc(analysisPhase ? phase(analysisPhase).name : "すべてのPhase")}</p>
  <div class="analysis-range"><p id="analysis-range">${analyticsFrom} ～ ${analyticsTo}</p><div class="row">${button("前の表示期間", "analysisPrevious", "", "quiet")}${button("現在の期間", "analysisCurrent", "", "quiet")}<button data-action="analysisNext" class="quiet" ${analyticsTo >= D.today() ? "disabled" : ""}>次の表示期間</button></div></div>
- <div class="stats-grid"><div class="stat-tile"><span>学習時間の合計</span><strong id="analysis-total">${report.total}<small> 分</small></strong><span>${report.studyDays}日学習</span></div><div class="stat-tile"><span>1日平均</span><strong id="analysis-average">${avg.value === null ? "—" : Math.round(avg.value * 10) / 10}<small>${avg.value === null ? "" : " 分"}</small></strong><span>${avg.days}日間・未学習日を含む</span></div></div>
- <p class="muted average-range">平均の対象：${avg.days ? avg.from + " ～ " + avg.to : "まだ記録がありません"}</p>
- <section class="card chart-card"><div class="section-title"><h2>学習時間の推移</h2><span class="muted">${analysisLabels[group]}・分</span></div>${ss.length ? "" : '<p class="muted">この条件の記録はありません</p>'}<div id="time-chart"></div></section>
+ <section class="card analysis-overview"><div><span>合計</span><strong id="analysis-total">${report.total}<small> 分</small></strong></div><div><span>学習した日</span><strong>${report.studyDays}<small> 日</small></strong></div><div><span>1日平均</span><strong id="analysis-average">${avg.value === null ? "—" : Math.round(avg.value * 10) / 10}<small>${avg.value === null ? "" : " 分"}</small></strong></div></section>
+ <section class="card chart-card"><div class="section-title"><h2>学習時間の推移</h2><span class="muted">${analysisLabels[group]}・分</span></div><div id="time-chart"></div></section>
  <details class="card analysis-breakdown"><summary>内訳を見る</summary><div class="analysis-tabs" role="group" aria-label="内訳の分類">${["material", "phase"].map((key) => `<button data-action="analysisBreakdown" data-id="${key}" aria-pressed="${breakdown === key}">${key === "material" ? "教材別" : "Phase別"}</button>`).join("")}</div><div id="analysis-breakdown">${rows || '<p class="muted">この条件の記録はありません</p>'}</div><p class="muted">上で選んだ期間・Phase・教材の条件で集計しています。</p></details>
- <details class="card period-editor"><summary>期間を指定する</summary><form id="range-form"><div class="form-grid">${field("開始日", "from", analyticsFrom, "date")}${field("終了日", "to", analyticsTo, "date")}</div><button class="primary">期間を表示</button><p class="form-error error" role="alert"></p></form></details>
+ <details class="card period-editor analysis-options" ${analysisOptionsOpen ? "open" : ""}><summary>絞り込み・期間を変更</summary> <div class="analysis-filters"><label for="analysis-phase">Phase</label><select id="analysis-phase">${options(data.phases, analysisPhase, "すべてのPhase")}</select>${analysisPhase ? `<p class="selection-preview" aria-hidden="true">${esc(phase(analysisPhase).name)}</p>` : ""}<label for="analysis-material">教材</label><select id="analysis-material">${options(data.materials, analysisMaterial, "すべての教材")}</select>${analysisMaterial ? `<p class="selection-preview" aria-hidden="true">${esc(mat(analysisMaterial).name)}</p>` : ""}</div>
+<form id="range-form"><div class="form-grid">${field("開始日", "from", analyticsFrom, "date")}${field("終了日", "to", analyticsTo, "date")}</div><button class="primary">期間を表示</button><p class="form-error error" role="alert"></p></form><p class="muted">平均：${avg.days ? avg.from + " ～ " + avg.to + "（" + avg.days + "日間・未学習日を含む）" : "まだ記録がありません"}</p></details>
  <details class="card chart-table"><summary>数値を表で見る</summary><table><thead><tr><th>期間</th><th>合計（分）</th></tr></thead><tbody>${bars.map(([date, n]) => `<tr><td>${chartRange(date)}</td><td>${n}</td></tr>`).join("")}</tbody></table></details>`;
-  timeChartEntries = bars;
-  timeChartOffset = null;
+  timeChartEntries = report.studyDays ? bars : [];
+  $(".analysis-options").ontoggle = (e) => {
+    analysisOptionsOpen = e.target.open;
+  };
   renderTimeChart();
   $("#range-form").onsubmit = (e) => {
     e.preventDefault();
@@ -310,39 +313,39 @@ function analytics() {
     analytics();
   };
   $("#analysis-phase").onchange = (e) => {
+    analysisOptionsOpen = true;
     analysisPhase = e.target.value;
     analytics();
   };
   $("#analysis-material").onchange = (e) => {
+    analysisOptionsOpen = true;
     analysisMaterial = e.target.value;
     analytics();
   };
 }
-let timeChartEntries = [],
-  timeChartOffset = null;
+let timeChartEntries = [];
 const chartRange = (date) => D.analysisBucketRange(date, group);
 function renderTimeChart() {
   const target = $("#time-chart");
   if (!target) return;
   if (!timeChartEntries.length) {
-    target.innerHTML = '<p class="muted">この期間の記録はありません</p>';
+    target.innerHTML =
+      '<p class="analysis-empty">この期間の記録はありません</p>';
     return;
   }
-  const count = Math.max(
-    1,
-    Math.min(7, Math.floor((target.clientWidth || 240) / 48)),
-  );
-  const total = timeChartEntries.length;
-  timeChartOffset ??= Math.max(0, total - count);
-  timeChartOffset = Math.min(timeChartOffset, Math.max(0, total - 1));
-  const entries = timeChartEntries.slice(
-      timeChartOffset,
-      timeChartOffset + count,
-    ),
-    maximum = Math.max(1, ...timeChartEntries.map(([, n]) => n)),
-    axisMax = Math.max(10, Math.ceil(maximum / 10) * 10);
-  target.innerHTML = `<p class="chart-period">${entries[0][0]} ～ ${group !== "day" ? chartRange(entries.at(-1)[0]).split(" ～ ")[1] : entries.at(-1)[0]}</p><div class="chart-scale"><span>縦軸：0～${axisMax}分</span><span>合計時間</span></div><div class="chart-plot" aria-label="学習時間の棒グラフ（0分から表示）">${entries.map(([date, n]) => `<button class="chart-column" data-action="bar" data-id="${chartRange(date)}：${n}分" aria-label="${chartRange(date)} ${n}分" aria-pressed="false"><span class="chart-value">${n}</span><span class="chart-track"><span class="chart-bar ${n === 0 ? "zero" : ""}" style="height:${n === 0 ? "2px" : (n / axisMax) * 100 + "%"}"></span></span><span class="chart-date">${group === "month" ? Number(date.slice(5, 7)) + "月" : Number(date.slice(5, 7)) + "/" + Number(date.slice(8, 10)) + (group === "week" ? "週" : "")}</span></button>`).join("")}</div><div class="chart-pagination">${timeChartOffset > 0 ? button("前の期間", "chartPrev", "", "quiet") : ""}<span class="muted">${timeChartOffset + 1}–${timeChartOffset + entries.length} / ${total}${group === "week" ? "週" : group === "month" ? "か月" : "日"}</span>${timeChartOffset + entries.length < total ? button("次の期間", "chartNext", "", "quiet") : ""}</div><p id="bar-detail" class="chart-detail">棒をタップすると、日付と学習時間を確認できます。</p>`;
-  target.dataset.pageSize = String(count);
+  const maximum = Math.max(1, ...timeChartEntries.map(([, n]) => n));
+  target.innerHTML = `<div class="compact-trend" aria-label="学習時間の推移">${timeChartEntries
+    .map(([date, n]) => {
+      const label =
+        group === "month"
+          ? Number(date.slice(5, 7)) + "月"
+          : Number(date.slice(5, 7)) +
+            "/" +
+            Number(date.slice(8, 10)) +
+            (group === "week" ? "週" : "");
+      return `<div class="trend-row" aria-label="${chartRange(date)} ${n}分"><span class="trend-date">${label}</span><span class="trend-track" aria-hidden="true"><span style="width:${(n / maximum) * 100}%"></span></span><strong>${n}<small> 分</small></strong></div>`;
+    })
+    .join("")}</div>`;
 }
 function settings() {
   root.innerHTML = `<h1>設定</h1><section class="card"><h2>Phase</h2>${data.phases.map((p) => `<div><h3>${esc(p.name)} <small>${status(p)}</small></h3><p class="muted">${p.start ?? "開始前"}${p.end ? " ～ " + p.end : ""}</p>${button("編集", "phase", p.id)}${p.id === data.phases.find((x) => x.status === "future")?.id ? button(data.current ? "このPhaseへ進む" : "このPhaseを開始", "advance", p.id) : ""}</div>`).join("")}${button("Phaseを追加", "phase")}</section><section class="card"><h2>教材</h2>${data.materials.map((m) => `<div class="row"><p>${esc(m.name)}</p>${button("…", "materialMenu", m.id, "menu")}</div>`).join("")}${button("教材を追加", "material")}</section><section class="card"><h2>データ管理</h2><p>記録はこのiPhone内に保存されます。機種変更やデータ消去の前にバックアップを書き出してください。</p><p class="muted">日常の入口はホーム画面アプリをご利用ください。Safariと保存領域が共有されることは保証されません。</p><p>${button("記録をテキストで出力", "export")}</p><p class="muted">日本語TXT。PCでも読める閲覧用です。</p><p>${button("バックアップを書き出す（JSON）", "backup")}</p><p class="muted">学習中の状態を含む全データの復元用です。</p><label>バックアップから復元<input type="file" id="restore-file" accept=".json,application/json"></label><p class="form-error error" role="alert"></p>${button("端末の保存保護を確認・要求", "persist")}<p id="storage-status" class="muted">保存保護も永久保存やバックアップを保証しません。</p>${updateRegistration?.waiting ? button("画面の更新を適用", "update") : ""}</section>`;
@@ -771,22 +774,6 @@ async function handle(action, id, target) {
       breakdown = id;
       analytics();
       $(".analysis-breakdown").open = true;
-      break;
-    case "bar":
-      $("#bar-detail").textContent = id;
-      document
-        .querySelectorAll(".chart-column")
-        .forEach((b) => b.setAttribute("aria-pressed", String(b === target)));
-      break;
-    case "chartPrev":
-    case "chartNext":
-      timeChartOffset = Math.max(
-        0,
-        timeChartOffset +
-          (action === "chartPrev" ? -1 : 1) *
-            Number($("#time-chart").dataset.pageSize),
-      );
-      renderTimeChart();
       break;
     case "export":
       exportForm();

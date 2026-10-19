@@ -633,6 +633,7 @@ export function analysisBucketRange(date, group) {
 export function analysisPeriod(group, now = today()) {
   if (group === "month")
     return { from: now.slice(0, 4) + "-01-01", to: now.slice(0, 4) + "-12-31" };
+  if (group === "day") return { from: shiftDate(now, -6), to: now };
   const monday = analysisBucket(now, "week");
   return {
     from: shiftDate(monday, group === "week" ? -49 : 0),

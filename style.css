@@ -1117,3 +1117,104 @@ main {
 .analysis-row small {
   font-weight: 400;
 }
+
+/* Occasional glance: summary first, values beside compact horizontal bars. */
+.analysis-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 16px;
+}
+.analysis-overview > div {
+  min-width: 0;
+}
+.analysis-overview span {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.analysis-overview strong {
+  display: block;
+  font-size: 1.5rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.analysis-overview small {
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+.analysis-overview > div:first-child strong {
+  color: var(--accent);
+}
+.analysis-scope {
+  font-size: 0.8125rem;
+  margin: -4px 0 12px;
+  overflow-wrap: anywhere;
+}
+.analysis-range {
+  margin: 10px 0 14px;
+}
+.analysis-range > p {
+  margin: 8px 0;
+  font-size: 0.875rem;
+}
+.analysis-range button {
+  min-height: 44px;
+}
+.analysis-options .analysis-filters {
+  margin-bottom: 16px;
+}
+.analysis-options .analysis-filters label {
+  margin-bottom: 4px;
+}
+.compact-trend {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+}
+.trend-row {
+  display: grid;
+  grid-template-columns: 3.75em minmax(0, 1fr) minmax(3.5em, auto);
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  font-size: 0.875rem;
+}
+.trend-date {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.trend-track {
+  height: 8px;
+  background: var(--accent-soft);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.trend-track > span {
+  display: block;
+  background: var(--accent);
+  height: 100%;
+  border-radius: 6px;
+}
+.trend-row strong {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.trend-row small {
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+.analysis-empty {
+  font-size: 0.875rem;
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+.chart-card {
+  padding: 16px;
+}
+.chart-card h2 {
+  font-size: 1rem;
+}
+.analysis-tabs {
+  margin-bottom: 10px;
+}
