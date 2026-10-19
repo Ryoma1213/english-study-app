@@ -609,3 +609,97 @@ export function streak(d, now = today()) {
   }
   return { count, yesterday };
 }
+
+// Read-only analytics. No data migration or writes are performed here.
+const analysisDate = (date) => new Date(date).toISOString().slice(0, 10);
+const shiftDate = (date, days) =>
+  analysisDate(Date.parse(date) + days * 86400000);
+export function analysisBucket(date, group) {
+  if (group === "month") return date.slice(0, 7) + "-01";
+  if (group === "week")
+    return shiftDate(date, -((new Date(date).getUTCDay() + 6) % 7));
+  return date;
+}
+export function analysisBucketRange(date, group) {
+  if (group === "day") return date;
+  const end =
+    group === "week"
+      ? shiftDate(date, 6)
+      : analysisDate(
+          Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)), 0),
+        );
+  return `${date} ～ ${end}`;
+}
+export function analysisPeriod(group, now = today()) {
+  if (group === "month")
+    return { from: now.slice(0, 4) + "-01-01", to: now.slice(0, 4) + "-12-31" };
+  const monday = analysisBucket(now, "week");
+  return {
+    from: shiftDate(monday, group === "week" ? -49 : 0),
+    to: shiftDate(monday, 6),
+  };
+}
+export function shiftAnalysisPeriod(from, to, group, direction) {
+  if (group === "month") {
+    const count =
+      (Number(to.slice(0, 4)) - Number(from.slice(0, 4))) * 12 +
+      Number(to.slice(5, 7)) -
+      Number(from.slice(5, 7)) +
+      1;
+    const shift = (date, end) => {
+      const year = Number(date.slice(0, 4)),
+        month = Number(date.slice(5, 7)) - 1 + direction * count;
+      return analysisDate(Date.UTC(year, month + (end ? 1 : 0), end ? 0 : 1));
+    };
+    return { from: shift(from, false), to: shift(to, true) };
+  }
+  const count = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1;
+  return {
+    from: shiftDate(from, count * direction),
+    to: shiftDate(to, count * direction),
+  };
+}
+export function summarizeAnalysis(
+  d,
+  { from, to, group = "day", phase = "", material = "" },
+  now = today(),
+) {
+  const until = to < now ? to : now;
+  const sessions = saved(d).filter(
+    (s) =>
+      day(s.start) >= from &&
+      day(s.start) <= until &&
+      (!phase || s.phase === phase) &&
+      (!material || s.material === material),
+  );
+  const bars = new Map();
+  for (let date = analysisBucket(from, group); date <= until;) {
+    bars.set(date, 0);
+    date =
+      group === "month"
+        ? analysisDate(
+            Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)), 1),
+          )
+        : shiftDate(date, group === "week" ? 7 : 1);
+  }
+  for (const s of sessions) {
+    const key = analysisBucket(day(s.start), group);
+    bars.set(key, (bars.get(key) ?? 0) + duration(s));
+  }
+  return {
+    sessions,
+    total: sum(sessions),
+    studyDays: new Set(sessions.map((s) => day(s.start))).size,
+    bars: [...bars],
+    average: average(
+      {
+        ...d,
+        phases: phase ? d.phases.filter((p) => p.id === phase) : d.phases,
+        sessions,
+      },
+      from,
+      to,
+      now,
+    ),
+  };
+}

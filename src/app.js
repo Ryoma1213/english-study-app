@@ -250,40 +250,52 @@ function history() {
 let analyticsFrom,
   analyticsTo,
   group = "day",
-  analysisPhase;
-function weekStart(date) {
-  const d = new Date(date),
-    offset = (d.getUTCDay() + 6) % 7;
-  return new Date(d.getTime() - offset * 86400000).toISOString().slice(0, 10);
-}
+  analysisPhase = "",
+  analysisMaterial = "",
+  breakdown = "material";
+const analysisLabels = { day: "日別", week: "週別", month: "月別" };
 function analytics() {
-  analyticsFrom ??= weekStart(D.today());
-  analyticsTo ??= D.today();
-  const ss = D.saved(data).filter(
-      (s) => D.day(s.start) >= analyticsFrom && D.day(s.start) <= analyticsTo,
-    ),
-    avg = D.average(data, analyticsFrom, analyticsTo),
-    bars = new Map();
-  for (
-    let t = Date.parse(analyticsFrom);
-    t <= Math.min(Date.parse(analyticsTo), Date.parse(D.today()));
-    t += 86400000
-  ) {
-    const date = new Date(t).toISOString().slice(0, 10),
-      key = group === "week" ? weekStart(date) : date;
-    bars.set(key, 0);
-  }
-  for (const s of ss) {
-    const key = group === "week" ? weekStart(D.day(s.start)) : D.day(s.start);
-    if (bars.has(key)) bars.set(key, bars.get(key) + D.duration(s));
-  }
-  root.innerHTML = `<div class="page-title"><div><p class="eyebrow">学習を振り返る</p><h1>分析</h1></div></div><div class="period-controls">${button("今週", "thisWeek", "", "quiet")}${button("今月", "thisMonth", "", "quiet")}</div><details class="card period-editor"><summary>期間・表示方法を選ぶ<span class="scope-label">${analyticsFrom} ～ ${analyticsTo}・${group === "week" ? "週別" : "日別"}</span></summary><form id="range-form"><div class="form-grid">${field("開始日", "from", analyticsFrom, "date")}${field("終了日", "to", analyticsTo, "date")}</div><label for="chart-group">集計単位</label><select id="chart-group" name="group"><option value="day" ${group === "day" ? "selected" : ""}>日別</option><option value="week" ${group === "week" ? "selected" : ""}>週別（合計）</option></select><button class="primary">期間を表示</button><p class="form-error error" role="alert"></p></form></details><div class="stats-grid"><div class="stat-tile"><span>学習時間の合計</span><strong>${D.sum(ss)}<small> 分</small></strong><span>${new Set(ss.map((s) => D.day(s.start))).size}日学習</span></div><div class="stat-tile"><span>1日平均</span><strong>${avg.value === null ? "—" : Math.round(avg.value * 10) / 10}<small>${avg.value === null ? "" : " 分"}</small></strong><span>${avg.days}日間・未学習日を含む</span></div></div><p class="muted average-range">平均の対象：${avg.days ? `${avg.from} ～ ${avg.to}` : "まだ記録がありません"}</p>${ss.length ? "" : '<p class="muted">まだ記録がありません</p>'}<section class="card chart-card"><div class="section-title"><h2>学習時間の推移</h2><span class="muted">${group === "week" ? "週別合計" : "日別"}・分</span></div><div id="time-chart"></div><details class="chart-table"><summary>すべての数値を表で見る</summary><table><thead><tr><th>期間</th><th>合計（分）</th></tr></thead><tbody>${[...bars].map(([d, n]) => `<tr><td>${chartRange(d)}</td><td>${n}</td></tr>`).join("")}</tbody></table></details></section><div class="section-title"><h2>Phase実績（全期間）</h2></div><label>閲覧するPhase<select id="analysis-phase">${data.phases.map((p) => `<option value="${p.id}" ${(analysisPhase ?? data.current) === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label><p class="selection-preview" id="analysis-phase-name"></p><div id="phase-analysis"></div><div class="section-title"><h2>教材別の学習時間（全期間）</h2></div>${data.materials
-    .map((m) => {
-      const xs = D.saved(data).filter((s) => s.material === m.id);
-      return `<section class="card"><h3>${esc(m.name)}</h3><p>累計 <strong>${D.sum(xs)}分</strong>・${new Set(xs.map((s) => D.day(s.start))).size}日</p></section>`;
+  if (!analyticsFrom)
+    ({ from: analyticsFrom, to: analyticsTo } = D.analysisPeriod(group));
+  if (!data.phases.some((p) => p.id === analysisPhase)) analysisPhase = "";
+  if (!data.materials.some((m) => m.id === analysisMaterial))
+    analysisMaterial = "";
+  const report = D.summarizeAnalysis(data, {
+    from: analyticsFrom,
+    to: analyticsTo,
+    group,
+    phase: analysisPhase,
+    material: analysisMaterial,
+  });
+  const { sessions: ss, average: avg, bars } = report;
+  const options = (items, selected, all) =>
+    `<option value="">${all}</option>${items.map((x) => `<option value="${esc(x.id)}" ${selected === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}`;
+  const rows = (breakdown === "material" ? data.materials : data.phases)
+    .map((x) => {
+      const xs = ss.filter((s) => s[breakdown] === x.id);
+      return xs.length
+        ? `<div class="analysis-row"><span>${esc(x.name)}</span><strong>${D.sum(xs)}<small> 分</small></strong></div>`
+        : "";
     })
-    .join("")}`;
-  timeChartEntries = [...bars];
+    .join("");
+  root.innerHTML = `<div class="page-title"><div><p class="eyebrow">学習を振り返る</p><h1>分析</h1></div></div>
+ <div class="analysis-tabs" role="group" aria-label="時間の集計単位">${Object.entries(
+   analysisLabels,
+ )
+   .map(
+     ([key, label]) =>
+       `<button data-action="analysisGroup" data-id="${key}" aria-pressed="${group === key}">${label}</button>`,
+   )
+   .join("")}</div>
+ <section class="card analysis-filters"><label for="analysis-phase">Phase</label><select id="analysis-phase">${options(data.phases, analysisPhase, "すべてのPhase")}</select>${analysisPhase ? `<p class="selection-preview" aria-hidden="true">${esc(phase(analysisPhase).name)}</p>` : ""}<label for="analysis-material">教材</label><select id="analysis-material">${options(data.materials, analysisMaterial, "すべての教材")}</select>${analysisMaterial ? `<p class="selection-preview" aria-hidden="true">${esc(mat(analysisMaterial).name)}</p>` : ""}</section>
+ <div class="analysis-range"><p id="analysis-range">${analyticsFrom} ～ ${analyticsTo}</p><div class="row">${button("前の表示期間", "analysisPrevious", "", "quiet")}${button("現在の期間", "analysisCurrent", "", "quiet")}<button data-action="analysisNext" class="quiet" ${analyticsTo >= D.today() ? "disabled" : ""}>次の表示期間</button></div></div>
+ <div class="stats-grid"><div class="stat-tile"><span>学習時間の合計</span><strong id="analysis-total">${report.total}<small> 分</small></strong><span>${report.studyDays}日学習</span></div><div class="stat-tile"><span>1日平均</span><strong id="analysis-average">${avg.value === null ? "—" : Math.round(avg.value * 10) / 10}<small>${avg.value === null ? "" : " 分"}</small></strong><span>${avg.days}日間・未学習日を含む</span></div></div>
+ <p class="muted average-range">平均の対象：${avg.days ? avg.from + " ～ " + avg.to : "まだ記録がありません"}</p>
+ <section class="card chart-card"><div class="section-title"><h2>学習時間の推移</h2><span class="muted">${analysisLabels[group]}・分</span></div>${ss.length ? "" : '<p class="muted">この条件の記録はありません</p>'}<div id="time-chart"></div></section>
+ <details class="card analysis-breakdown"><summary>内訳を見る</summary><div class="analysis-tabs" role="group" aria-label="内訳の分類">${["material", "phase"].map((key) => `<button data-action="analysisBreakdown" data-id="${key}" aria-pressed="${breakdown === key}">${key === "material" ? "教材別" : "Phase別"}</button>`).join("")}</div><div id="analysis-breakdown">${rows || '<p class="muted">この条件の記録はありません</p>'}</div><p class="muted">上で選んだ期間・Phase・教材の条件で集計しています。</p></details>
+ <details class="card period-editor"><summary>期間を指定する</summary><form id="range-form"><div class="form-grid">${field("開始日", "from", analyticsFrom, "date")}${field("終了日", "to", analyticsTo, "date")}</div><button class="primary">期間を表示</button><p class="form-error error" role="alert"></p></form></details>
+ <details class="card chart-table"><summary>数値を表で見る</summary><table><thead><tr><th>期間</th><th>合計（分）</th></tr></thead><tbody>${bars.map(([date, n]) => `<tr><td>${chartRange(date)}</td><td>${n}</td></tr>`).join("")}</tbody></table></details>`;
+  timeChartEntries = bars;
   timeChartOffset = null;
   renderTimeChart();
   $("#range-form").onsubmit = (e) => {
@@ -295,24 +307,20 @@ function analytics() {
     }
     analyticsFrom = f.from.value;
     analyticsTo = f.to.value;
-    group =
-      Date.parse(analyticsTo) - Date.parse(analyticsFrom) > 60 * 86400000
-        ? "week"
-        : f.group.value;
     analytics();
   };
   $("#analysis-phase").onchange = (e) => {
     analysisPhase = e.target.value;
-    phaseAnalysis();
+    analytics();
   };
-  phaseAnalysis();
+  $("#analysis-material").onchange = (e) => {
+    analysisMaterial = e.target.value;
+    analytics();
+  };
 }
 let timeChartEntries = [],
   timeChartOffset = null;
-const chartRange = (date) =>
-  group === "week"
-    ? `${date} ～ ${new Date(Date.parse(date) + 6 * 86400000).toISOString().slice(0, 10)}`
-    : date;
+const chartRange = (date) => D.analysisBucketRange(date, group);
 function renderTimeChart() {
   const target = $("#time-chart");
   if (!target) return;
@@ -333,24 +341,8 @@ function renderTimeChart() {
     ),
     maximum = Math.max(1, ...timeChartEntries.map(([, n]) => n)),
     axisMax = Math.max(10, Math.ceil(maximum / 10) * 10);
-  target.innerHTML = `<p class="chart-period">${entries[0][0]} ～ ${group === "week" ? chartRange(entries.at(-1)[0]).split(" ～ ")[1] : entries.at(-1)[0]}</p><div class="chart-scale"><span>縦軸：0～${axisMax}分</span><span>合計時間</span></div><div class="chart-plot" aria-label="学習時間の棒グラフ（0分から表示）">${entries.map(([date, n]) => `<button class="chart-column" data-action="bar" data-id="${chartRange(date)}：${n}分" aria-label="${chartRange(date)} ${n}分" aria-pressed="false"><span class="chart-value">${n}</span><span class="chart-track"><span class="chart-bar ${n === 0 ? "zero" : ""}" style="height:${n === 0 ? "2px" : (n / axisMax) * 100 + "%"}"></span></span><span class="chart-date">${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}</span></button>`).join("")}</div><div class="chart-pagination">${timeChartOffset > 0 ? button("前の期間", "chartPrev", "", "quiet") : ""}<span class="muted">${timeChartOffset + 1}–${timeChartOffset + entries.length} / ${total}${group === "week" ? "週" : "日"}</span>${timeChartOffset + entries.length < total ? button("次の期間", "chartNext", "", "quiet") : ""}</div><p id="bar-detail" class="chart-detail">棒をタップすると、日付と学習時間を確認できます。</p>`;
+  target.innerHTML = `<p class="chart-period">${entries[0][0]} ～ ${group !== "day" ? chartRange(entries.at(-1)[0]).split(" ～ ")[1] : entries.at(-1)[0]}</p><div class="chart-scale"><span>縦軸：0～${axisMax}分</span><span>合計時間</span></div><div class="chart-plot" aria-label="学習時間の棒グラフ（0分から表示）">${entries.map(([date, n]) => `<button class="chart-column" data-action="bar" data-id="${chartRange(date)}：${n}分" aria-label="${chartRange(date)} ${n}分" aria-pressed="false"><span class="chart-value">${n}</span><span class="chart-track"><span class="chart-bar ${n === 0 ? "zero" : ""}" style="height:${n === 0 ? "2px" : (n / axisMax) * 100 + "%"}"></span></span><span class="chart-date">${group === "month" ? Number(date.slice(5, 7)) + "月" : Number(date.slice(5, 7)) + "/" + Number(date.slice(8, 10)) + (group === "week" ? "週" : "")}</span></button>`).join("")}</div><div class="chart-pagination">${timeChartOffset > 0 ? button("前の期間", "chartPrev", "", "quiet") : ""}<span class="muted">${timeChartOffset + 1}–${timeChartOffset + entries.length} / ${total}${group === "week" ? "週" : group === "month" ? "か月" : "日"}</span>${timeChartOffset + entries.length < total ? button("次の期間", "chartNext", "", "quiet") : ""}</div><p id="bar-detail" class="chart-detail">棒をタップすると、日付と学習時間を確認できます。</p>`;
   target.dataset.pageSize = String(count);
-}
-function phaseAnalysis() {
-  const p = phase($("#analysis-phase")?.value);
-  if (!p) return;
-  $("#analysis-phase-name").textContent = p.name;
-  const ss = D.saved(data).filter((s) => s.phase === p.id);
-  $("#phase-analysis").innerHTML =
-    `<p>${D.sum(ss)}分・${new Set(ss.map((s) => D.day(s.start))).size}日</p>${data.materials
-      .filter(
-        (m) => m.phases.includes(p.id) || ss.some((s) => s.material === m.id),
-      )
-      .map(
-        (m) =>
-          `<section class="card"><h3>${esc(m.name)}</h3><p>${D.sum(ss.filter((s) => s.material === m.id))}分</p></section>`,
-      )
-      .join("")}`;
 }
 function settings() {
   root.innerHTML = `<h1>設定</h1><section class="card"><h2>Phase</h2>${data.phases.map((p) => `<div><h3>${esc(p.name)} <small>${status(p)}</small></h3><p class="muted">${p.start ?? "開始前"}${p.end ? " ～ " + p.end : ""}</p>${button("編集", "phase", p.id)}${p.id === data.phases.find((x) => x.status === "future")?.id ? button(data.current ? "このPhaseへ進む" : "このPhaseを開始", "advance", p.id) : ""}</div>`).join("")}${button("Phaseを追加", "phase")}</section><section class="card"><h2>教材</h2>${data.materials.map((m) => `<div class="row"><p>${esc(m.name)}</p>${button("…", "materialMenu", m.id, "menu")}</div>`).join("")}${button("教材を追加", "material")}</section><section class="card"><h2>データ管理</h2><p>記録はこのiPhone内に保存されます。機種変更やデータ消去の前にバックアップを書き出してください。</p><p class="muted">日常の入口はホーム画面アプリをご利用ください。Safariと保存領域が共有されることは保証されません。</p><p>${button("記録をテキストで出力", "export")}</p><p class="muted">日本語TXT。PCでも読める閲覧用です。</p><p>${button("バックアップを書き出す（JSON）", "backup")}</p><p class="muted">学習中の状態を含む全データの復元用です。</p><label>バックアップから復元<input type="file" id="restore-file" accept=".json,application/json"></label><p class="form-error error" role="alert"></p>${button("端末の保存保護を確認・要求", "persist")}<p id="storage-status" class="muted">保存保護も永久保存やバックアップを保証しません。</p>${updateRegistration?.waiting ? button("画面の更新を適用", "update") : ""}</section>`;
@@ -756,15 +748,29 @@ async function handle(action, id, target) {
       history();
       break;
     }
-    case "thisWeek":
-      analyticsFrom = weekStart(D.today());
-      analyticsTo = D.today();
+    case "analysisGroup":
+      group = id;
+      ({ from: analyticsFrom, to: analyticsTo } = D.analysisPeriod(group));
       analytics();
       break;
-    case "thisMonth":
-      analyticsFrom = D.today().slice(0, 7) + "-01";
-      analyticsTo = D.today();
+    case "analysisCurrent":
+      ({ from: analyticsFrom, to: analyticsTo } = D.analysisPeriod(group));
       analytics();
+      break;
+    case "analysisPrevious":
+    case "analysisNext":
+      ({ from: analyticsFrom, to: analyticsTo } = D.shiftAnalysisPeriod(
+        analyticsFrom,
+        analyticsTo,
+        group,
+        action === "analysisPrevious" ? -1 : 1,
+      ));
+      analytics();
+      break;
+    case "analysisBreakdown":
+      breakdown = id;
+      analytics();
+      $(".analysis-breakdown").open = true;
       break;
     case "bar":
       $("#bar-detail").textContent = id;
@@ -919,7 +925,7 @@ new ResizeObserver(() => {
 function syncSelectPreviews() {
   for (const select of root.querySelectorAll("select")) {
     if (
-      select.id === "analysis-phase" ||
+      select.id.startsWith("analysis-") ||
       select.name === "group" ||
       select.name === "mode"
     )

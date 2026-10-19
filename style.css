@@ -1045,3 +1045,75 @@ html {
 main {
   padding-bottom: calc(var(--nav-height, 90px) + 70px);
 }
+
+.analysis-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 5px;
+  background: var(--accent-soft);
+  border-radius: 16px;
+  margin: 0 0 16px;
+}
+.analysis-tabs button {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  padding: 10px 4px;
+  min-width: 0;
+}
+.analysis-tabs button[aria-pressed="true"] {
+  background: var(--card);
+  color: var(--accent);
+  border-color: var(--line);
+  box-shadow: var(--shadow);
+}
+.analysis-filters label {
+  margin-top: 12px;
+  font-size: 0.875rem;
+}
+.analysis-filters label:first-child {
+  margin-top: 0;
+}
+.analysis-filters .selection-preview {
+  margin: 4px 0 0;
+}
+.analysis-range {
+  margin: 16px 0;
+}
+.analysis-range > p {
+  text-align: center;
+  font-weight: 600;
+}
+.analysis-range .row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.analysis-range button {
+  font-size: 0.8125rem;
+  padding: 10px 3px;
+  min-width: 0;
+}
+.analysis-breakdown .analysis-tabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 16px;
+}
+.analysis-row {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.analysis-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  flex: 1;
+}
+.analysis-row strong {
+  flex: none;
+}
+.analysis-row small {
+  font-weight: 400;
+}
